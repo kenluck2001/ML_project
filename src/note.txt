@@ -1,0 +1,320 @@
+function [sumValue ] = calError(X, kv)
+[length, dimension] = size(X);
+Xmodified = X;
+Xmodified(:,(dimension + 1) ) = zeros(length, 1);
+% shuffle a matrix
+%Xmodified = Xmodified( randperm(length),:);
+count = 0;
+mid_value = round (length / 10);
+for i=1:mid_value:length,
+	start_index = i;
+	end_index = start_index + mid_value;
+	if  end_index > length,
+		end_index = length;
+	end
+	count = count + 1;
+	%randomly split your data set into 10 parts
+	Xmodified(start_index : end_index, (dimension + 1) ) = count;
+end
+
+
+sumValue = 0;
+%training set
+for i = 1:10,
+	training_matrix = [];
+	training_matrix_2= [];
+	training_matrix_1 = [];
+	selectedrows = find(Xmodified( :, (dimension + 1) ) == i);
+	unique_array = Xmodified(selectedrows,:);
+	testing_matrix = [unique_array;];	
+	testing_matrix = testing_matrix(:,(1 : dimension));
+	
+	if i < 10,
+		for p = i+1:10,
+			selectedrows = find(Xmodified( :, (dimension + 1) ) == p);
+			unique_array = Xmodified(selectedrows,:);
+			training_matrix_1 = [unique_array;];
+			
+		end
+	end
+	%get missing items
+	
+	if i > 2,
+		for k=1:i-1,
+			selectedrows = find(Xmodified( :, (dimension + 1) ) == k);
+			unique_array = Xmodified(selectedrows,:);
+			training_matrix_2 = [unique_array;]	;	
+		end
+	end
+	
+	training_matrix = [training_matrix_1; training_matrix_2];
+	training_matrix = training_matrix(:,(1 : dimension));
+
+
+	rand_centroids = randn ( kv, dimension );
+	[centroids, y] = mykmeans(training_matrix, rand_centroids);
+	dist_matrix = pdist2(testing_matrix, centroids,  'euclidean');
+	dist_matrix = snip(dist_matrix, NaN);
+	sum_of_squared_errors = sum(sum( dist_matrix )); % euclidean distance
+	sumValue = sumValue + sum_of_squared_errors;
+end
+
+
+#################################################################3
+
+function [sumValue ] = calError(X, kv)
+	[nlength, dimension] = size(X);
+
+	damping_factor = 1e10;
+	sumValue = 0;
+	num_of_fold = 10;
+	for i = 1:num_of_fold,
+		num_left_out = round(nlength / num_of_fold);
+		[Train, Test] = crossvalind('LeaveMOut', nlength , num_left_out);
+		rand_centroids = randn ( kv, dimension );
+		training_index = find( Train );
+		training_matrix = X(training_index,:);
+		[centroids, y] = mykmeans(training_matrix, rand_centroids);
+		testing_index = find( Test );
+		testing_matrix = X(testing_index,:);
+
+	    dist_matrix = pdist2( centroids, testing_matrix, 'euclidean');
+        dist_matrix(any(isnan(dist_matrix),2),:)=[];
+	    sum_of_squared_errors = sum(sum( dist_matrix )); % euclidean distance
+	    sumValue = sumValue + sum_of_squared_errors;
+
+	end
+
+	sumValue = sum(sumValue) / kv;
+	%apply a damping function
+	%sumValue = sumValue / damping_factor;
+
+
+
+
+
+end
+
+
+########################################################
+function [c, a] = mykmeans(X, c)
+
+  % INPUT
+  % X ... data matrix (no labels), each row is one sample
+  % c ... initial centroids
+  % 
+  % OUTPUT
+  % c ... final cluster centroids
+  % a ... cluster assignments for each datapoint of X
+
+  K = size(c,1);
+  [N,n] = size(X);
+  % K ... number of clusters
+  % N ... number of data vectors
+  % n ... number of attributes
+
+  epsi = 1e-7; % small number, used in stoppinc criterion
+  cnt_max = 100; % maximum number of iterations, to not end up in endless loop
+  zero = 1e-250;
+
+  dist = zeros(N,K); % to store distances
+
+  for i=1:cnt_max
+
+    %fprintf('[%d]',i) % show the progress
+
+    % calculate distances from each centroid to all data points
+    for k=1:K
+      dist(:,k) = sum((repmat(c(k,:),N,1) - X).^2, 2);
+    end
+
+    % find minimum distance, i.e. update cluster assignments 'a'
+    [dummy, a] = min(dist,[],2);
+
+    % calculate new means
+    new_c = zeros(K,n);
+    for k=1:K
+      clusterobj = (a==k); % objects assigned to cluster k
+      if  (length(clusterobj)<1) 
+        new_c(k,:) = 0;
+        %fprintf('\n Cluster %d is now empty!\n',k)
+      else
+        %avoid division by zero
+        if sum(clusterobj)> zero
+            new_c(k,:) = sum(X(clusterobj,:),1) / sum(clusterobj) ;
+        end
+      end
+    end
+
+    % check for convergence
+    if (max(abs(new_c-c)) < epsi)
+      %fprintf('\n k-means converged after %d iterations\n', i) 
+      c = new_c; % return latest cluster centroids
+      break % stop if means don't change too much anymore
+    end
+
+    c = new_c; % latest centroids will be updated in next run
+
+    if (i == cnt_max)
+      %fprintf('\n k-means did not converge after %d iterations\n', cnt_max)
+      break
+    end
+
+  end
+
+
+########################################################################
+function[centroid, pointsInCluster, assignment]= mykmeans(data, nbCluster)
+% usage
+% function[centroid, pointsInCluster, assignment]=
+% myKmeans(data, nbCluster)
+%
+% Output:
+% centroid: matrix in each row are the Coordinates of a centroid
+% pointsInCluster: row vector with the nbDatapoints belonging to
+% the centroid
+% assignment: row Vector with clusterAssignment of the dataRows
+%
+% Input:
+% data in rows
+% nbCluster : nb of centroids to determine
+%
+% (c) by Christian Herta ( www.christianherta.de )
+%
+data_dim = length(data(1,:));
+nbData   = length(data(:,1));
+
+cnt_max = 100; % maximum number of iterations, to not end up in endless loop
+% init the centroids randomly
+data_min = min(data);
+data_max = max(data);
+data_diff = data_max .- data_min ;
+% every row is a centroid
+centroid = ones(nbCluster, data_dim) .* rand(nbCluster, data_dim);
+for i=1 : 1 : length(centroid(:,1))
+    centroid( i , : ) =   centroid( i , : )  .* data_diff;
+    centroid( i , : ) =   centroid( i , : )  + data_min;
+end
+% end init centroids
+
+
+
+% no stopping at start
+pos_diff = 1.;
+i = 0;
+
+% main loop until
+while ((pos_diff > 0.0) && (i != cnt_max))
+
+    % E-Step
+    assignment = [];
+    % assign each datapoint to the closest centroid
+    for d = 1 : length( data(:, 1) );
+
+        min_diff = ( data( d, :) .- centroid( 1,:) );
+        min_diff = min_diff * min_diff';
+        curAssignment = 1;
+
+        for c = 2 : nbCluster;
+            diff2c = ( data( d, :) .- centroid( c,:) );
+            diff2c = diff2c * diff2c';
+            if( min_diff >= diff2c)
+                curAssignment = c;
+                min_diff = diff2c;
+            end
+        end
+
+        % assign the d-th dataPoint
+        assignment = [ assignment; curAssignment];
+
+    end
+
+    % for the stoppingCriterion
+    oldPositions = centroid;
+
+    % M-Step
+    % recalculate the positions of the centroids
+    centroid = zeros(nbCluster, data_dim);
+    pointsInCluster = zeros(nbCluster, 1);
+
+    for d = 1: length(assignment);
+        centroid( assignment(d),:) += data(d,:);
+        pointsInCluster( assignment(d), 1 )++;
+    end
+
+    for c = 1: nbCluster;
+        if( pointsInCluster(c, 1) != 0)
+            centroid( c , : ) = centroid( c, : ) / pointsInCluster(c, 1);
+        else
+            % set cluster randomly to new position
+            centroid( c , : ) = (rand( 1, data_dim) .* data_diff) + data_min;
+        end
+    end
+    i = i + 1;
+
+    %stoppingCriterion
+    pos_diff = sum (sum( (centroid .- oldPositions).^2 ) );
+
+end
+
+######################################################################################
+
+X = loadmnist(1000);
+K = 10; %number of clusters
+N = size(X, 1);%size of data
+% calculate similarity matrix
+%('Calculating similarity matrix:\n')
+S = zeros(N,N);
+for i=1:N
+    d = sqrt(sum( (repmat(X(i,:),N,1) - X).^2, 2 )); % distance
+    S(i,:) = -d; % negative distance is similarity
+end
+% initialize centroids with first 10 numbers, and run k-means
+c = zeros(1,K);
+for i=1:K,
+    c(i) = randi([1 N]);
+end
+[c_final, a] = mykmedoids(S, c);
+
+########################################################################################
+  %fprintf(datafile,'%s\n', '################# CH index #################################');
+
+    %for  vind  = 1:15,
+     %   fprintf(datafile, '%d,%d\n', vind , yi( vind ));     
+    %end
+
+    %obtain the value of the optimal number of clusters from the chart
+    %K = 10; %number of clusters obtained from chart
+
+
+    % initialize centroids with random 10 numbers, and run k-means
+    %c = zeros(1,K);
+    %for i=1:K,
+    %    c(i) = randi([1 N]);
+    %end
+
+    %[c_final, a] = mykmedoids(S, c);
+
+    %fprintf(datafile,'%s\n', '################### C_final data ########################');
+    %for  vind  = 1:length(c_final),
+    %    fprintf(datafile, '%d\n', c_final(vind) );     
+    %end
+
+    %c_final contains the index of the prototype of the class
+
+#########################################################################################
+
+    %subplot(2,1,1);
+	%plot(x, y);
+	%xlabel('Number of clusters');
+	%ylabel('Squared euclidean error');
+	%title('Determining the Optimal number of clusters using cross-validation');
+
+    % estimate the numbers of clusters using Calinski-Harabasz
+    %[xi, yi] = calnumofclustersCH(Y);
+
+    %subplot(2,1,2);
+	%plot(xi, yi);
+	%xlabel('Number of clusters');
+	%ylabel('variance ratio criterion (VRC)');
+	%title('Determining the Optimal number of clusters using Calinski-Harabasz');
