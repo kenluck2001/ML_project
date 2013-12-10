@@ -6,7 +6,7 @@ This paper proposes an efficient method for recognizing handwritten images using
 However, the optimal number of clusters can be estimated by using cross-validation. The number of clusters is passed as input to the K-medoid algorithm which returns images that are centroids of the clusters. These centroids are assigned appropriate labels by the user after visual inspection.
 
 Code structure
-The codes are written in Octave. This procedures are written in different files and function to ensure code modularity. The main files are:
+The codes are written in Octave. This procedures are written in different files and function to ensure code modularity. The main files are in src folder. They include:
 
 calError.m	      
 mykmeans.m      
